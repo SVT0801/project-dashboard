@@ -1,0 +1,132 @@
+{
+  "name": "project-dashboard",
+  "displayName": "Project Dashboard",
+  "description": "Visual dashboard for managing projects with tags, descriptions and multiple view modes",
+  "version": "0.0.1",
+  "publisher": "svt",
+  "author": {
+    "name": "SVT"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/svt/project-dashboard"
+  },
+  "bugs": {
+    "url": "https://github.com/svt/project-dashboard/issues"
+  },
+  "homepage": "https://github.com/svt/project-dashboard#readme",
+  "keywords": [
+    "dashboard",
+    "projects",
+    "project manager",
+    "workspace",
+    "folders",
+    "tags",
+    "organization"
+  ],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "projectDashboard",
+          "title": "Projects",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "projectDashboard": [
+        {
+          "id": "projectDashboard",
+          "name": "My Projects",
+          "type": "webview",
+          "icon": "$(project)"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "projectDashboard.addProject",
+        "title": "Add Project",
+        "icon": "$(add)"
+      },
+      {
+        "command": "projectDashboard.editProject",
+        "title": "Edit Project",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "projectDashboard.deleteProject",
+        "title": "Delete Project",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "projectDashboard.toggleView",
+        "title": "Toggle View: Cards/Table",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "projectDashboard.showSettings",
+        "title": "Project Dashboard: Settings & Info",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "projectDashboard.exportProjects",
+        "title": "Project Dashboard: Export Projects to JSON",
+        "icon": "$(export)"
+      },
+      {
+        "command": "projectDashboard.importProjects",
+        "title": "Project Dashboard: Import Projects from JSON",
+        "icon": "$(import)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "projectDashboard.addProject",
+          "when": "view == projectDashboard",
+          "group": "navigation@1"
+        },
+        {
+          "command": "projectDashboard.toggleView",
+          "when": "view == projectDashboard",
+          "group": "navigation@2"
+        },
+        {
+          "command": "projectDashboard.showSettings",
+          "when": "view == projectDashboard",
+          "group": "navigation@3"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package",
+    "install-local": "npm run package && code --install-extension project-dashboard-0.0.1.vsix --force"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "20.x",
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "eslint": "^8.56.0",
+    "typescript": "^5.3.3"
+  }
+}
