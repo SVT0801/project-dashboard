@@ -75,5 +75,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implemented `escapeHtml()` for all user content in HTML
 - Added Map-based locking to prevent race conditions in folder path verification
 
-[Unreleased]: https://github.com/svt/project-dashboard/compare/v0.0.1...HEAD
-[0.0.1]: https://github.com/svt/project-dashboard/releases/tag/v0.0.1
+[Unreleased]: https://github.com/SVT0801/project-dashboard/compare/v0.0.1...HEAD
+[0.0.1]: https://github.com/SVT0801/project-dashboard/releases/tag/v0.0.1

@@ -10,12 +10,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/svt/project-dashboard"
+    "url": "https://github.com/SVT0801/project-dashboard"
   },
   "bugs": {
-    "url": "https://github.com/svt/project-dashboard/issues"
+    "url": "https://github.com/SVT0801/project-dashboard/issues"
   },
-  "homepage": "https://github.com/svt/project-dashboard#readme",
+  "homepage": "https://github.com/SVT0801/project-dashboard#readme",
   "keywords": [
     "dashboard",
     "projects",
