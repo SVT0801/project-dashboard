@@ -66,7 +66,7 @@ export class ProjectDetailViewProvider {
     }
 
     this._panel.title = project.name;
-    this._panel.webview.html = this.getHtmlContent(project);
+    this._panel.webview.html = await this.getHtmlContent(project);
 
     // Обработка сообщений от WebView
     // Очищаем старый обработчик перед созданием нового
@@ -88,9 +88,11 @@ export class ProjectDetailViewProvider {
           // Обновляем содержимое панели
           const updatedProject = this.projectsProvider.getProject(projectId);
           if (updatedProject && this._panel) {
-            this._panel.webview.html = this.getHtmlContent(updatedProject);
+            this._panel.webview.html = await this.getHtmlContent(updatedProject);
           }
         }
+      } else if (message.command === 'openSettings') {
+        await vscode.commands.executeCommand('projectDashboard.openSettings');
       }
     });
   }
@@ -171,7 +173,9 @@ export class ProjectDetailViewProvider {
     }
   }
 
-  private getHtmlContent(project: Project): string {
+  private async getHtmlContent(project: Project): Promise<string> {
+    const clients = await this.projectsProvider.getClients();
+    
     return `<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -578,6 +582,36 @@ export class ProjectDetailViewProvider {
       </div>
     </div>
 
+    <div class="section">
+      <div class="section-header">Название клиента</div>
+      <div class="section-body">
+        <div class="editable-field ${project.clientName ? '' : 'empty'}" 
+             onclick="editClientName()" 
+             title="Кликните для редактирования"
+             style="min-height: 40px;">
+          <div id="clientName-display">
+            ${project.clientName ? this.escapeHtml(project.clientName) : 'Нет названия клиента. Кликните чтобы добавить...'}
+          </div>
+        </div>
+        <div class="edit-hint">Кликните чтобы выбрать из списка. <a href="#" onclick="event.preventDefault(); openSettings();" style="color: var(--vscode-textLink-foreground);">Управление клиентами</a></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">Ссылка на проект</div>
+      <div class="section-body">
+        <div class="editable-field ${project.projectUrl ? '' : 'empty'}" 
+             onclick="editProjectUrl()" 
+             title="Кликните для редактирования"
+             style="min-height: 40px;">
+          <div id="projectUrl-display">
+            ${project.projectUrl ? `<a href="${this.escapeHtml(project.projectUrl)}" target="_blank" style="color: var(--vscode-textLink-foreground); text-decoration: none;" onclick="event.stopPropagation();">${this.escapeHtml(project.projectUrl)}</a>` : 'Нет ссылки. Кликните чтобы добавить...'}
+          </div>
+        </div>
+        <div class="edit-hint">Кликните чтобы редактировать. Укажите полный URL</div>
+      </div>
+    </div>
+
     ${project.path ? `
       <div class="section">
         <div class="section-header">Папка проекта</div>
@@ -624,6 +658,10 @@ export class ProjectDetailViewProvider {
 
     function openProject() {
       vscode.postMessage({ command: 'openProject' });
+    }
+
+    function openSettings() {
+      vscode.postMessage({ command: 'openSettings' });
     }
 
     function editTitle() {
@@ -732,6 +770,101 @@ export class ProjectDetailViewProvider {
         command: 'saveField',
         field: 'tags',
         value: tags
+      });
+    }
+
+    function editClientName() {
+      const display = document.getElementById('clientName-display');
+      const parent = display.parentElement;
+      const currentValue = display.textContent.trim();
+      const isEmpty = parent.classList.contains('empty');
+      
+      const clients = ${JSON.stringify(clients)};
+      
+      const select = document.createElement('select');
+      select.className = 'tags-input';
+      select.style.padding = '8px 12px';
+      
+      // Добавляем пустую опцию
+      const emptyOption = document.createElement('option');
+      emptyOption.value = '';
+      emptyOption.textContent = '-- Не выбрано --';
+      select.appendChild(emptyOption);
+      
+      // Добавляем клиентов из списка
+      clients.forEach(client => {
+        const option = document.createElement('option');
+        option.value = client;
+        option.textContent = client;
+        if (client === currentValue) {
+          option.selected = true;
+        }
+        select.appendChild(option);
+      });
+      
+      // Если текущее значение не из списка, добавляем его
+      if (currentValue && !isEmpty && !clients.includes(currentValue)) {
+        const customOption = document.createElement('option');
+        customOption.value = currentValue;
+        customOption.textContent = currentValue + ' (не в списке)';
+        customOption.selected = true;
+        select.appendChild(customOption);
+      }
+      
+      parent.innerHTML = '';
+      parent.appendChild(select);
+      parent.onclick = null;
+      select.focus();
+
+      select.addEventListener('blur', () => saveClientName(select.value));
+      select.addEventListener('change', () => saveClientName(select.value));
+      select.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          location.reload();
+        }
+      });
+    }
+
+    function saveClientName(value) {
+      vscode.postMessage({
+        command: 'saveField',
+        field: 'clientName',
+        value: value.trim()
+      });
+    }
+
+    function editProjectUrl() {
+      const display = document.getElementById('projectUrl-display');
+      const parent = display.parentElement;
+      const currentValue = display.textContent.trim();
+      const isEmpty = parent.classList.contains('empty');
+      
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'tags-input';
+      input.value = isEmpty ? '' : currentValue;
+      input.placeholder = 'Введите URL проекта';
+      
+      parent.innerHTML = '';
+      parent.appendChild(input);
+      parent.onclick = null;
+      input.focus();
+
+      input.addEventListener('blur', () => saveProjectUrl(input.value));
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          saveProjectUrl(input.value);
+        } else if (e.key === 'Escape') {
+          location.reload();
+        }
+      });
+    }
+
+    function saveProjectUrl(value) {
+      vscode.postMessage({
+        command: 'saveField',
+        field: 'projectUrl',
+        value: value.trim()
       });
     }
 

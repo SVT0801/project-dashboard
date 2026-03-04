@@ -1,13 +1,20 @@
 import * as vscode from 'vscode';
+import { ProjectsProvider } from './projectsProvider';
+import { WebViewMessage } from './types';
 
 export class SettingsViewProvider {
   private _panel?: vscode.WebviewPanel;
+  private _messageDisposable?: vscode.Disposable;
 
-  constructor(private context: vscode.ExtensionContext) {}
+  constructor(
+    private context: vscode.ExtensionContext,
+    private projectsProvider: ProjectsProvider
+  ) {}
 
-  public show() {
+  public async show() {
     if (this._panel) {
       this._panel.reveal();
+      await this.refreshClients();
       return;
     }
 
@@ -21,14 +28,41 @@ export class SettingsViewProvider {
       }
     );
 
-    this._panel.webview.html = this.getHtmlContent();
+    this._panel.webview.html = await this.getHtmlContent();
 
     this._panel.onDidDispose(() => {
+      this._messageDisposable?.dispose();
+      this._messageDisposable = undefined;
       this._panel = undefined;
+    });
+
+    // Обработка сообщений от WebView
+    this._messageDisposable?.dispose();
+    this._messageDisposable = this._panel.webview.onDidReceiveMessage(async (message: WebViewMessage) => {
+      if (message.command === 'getClients') {
+        await this.refreshClients();
+      } else if (message.command === 'addClient' && 'client' in message) {
+        await this.projectsProvider.addClient(message.client);
+        await this.refreshClients();
+      } else if (message.command === 'deleteClient' && 'client' in message) {
+        await this.projectsProvider.deleteClient(message.client);
+        await this.refreshClients();
+      }
     });
   }
 
-  private getHtmlContent(): string {
+  private async refreshClients() {
+    if (this._panel) {
+      const clients = await this.projectsProvider.getClients();
+      this._panel.webview.postMessage({
+        command: 'updateClients',
+        clients
+      });
+    }
+  }
+
+  private async getHtmlContent(): Promise<string> {
+    const clients = await this.projectsProvider.getClients();
     return `<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -219,6 +253,115 @@ export class SettingsViewProvider {
       padding: 2px 6px;
       border-radius: 3px;
     }
+
+    /* Секция управления клиентами */
+    .clients-section {
+      margin-top: 12px;
+    }
+
+    .clients-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      background-color: var(--vscode-input-background);
+      border: 1px solid var(--vscode-input-border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .clients-table thead {
+      background-color: var(--vscode-list-hoverBackground);
+    }
+
+    .clients-table th {
+      text-align: left;
+      padding: 6px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--vscode-descriptionForeground);
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--vscode-input-border);
+    }
+
+    .clients-table td {
+      padding: 4px 12px;
+      font-size: 13px;
+      color: var(--vscode-foreground);
+      border-bottom: 1px solid var(--vscode-widget-border);
+    }
+
+    .clients-table tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .clients-table tbody tr:hover {
+      background-color: var(--vscode-list-hoverBackground);
+    }
+
+    .client-delete-btn {
+      background: none;
+      border: none;
+      color: var(--vscode-errorForeground);
+      cursor: pointer;
+      padding: 2px 6px;
+      font-size: 12px;
+      opacity: 0.6;
+      transition: opacity 0.2s;
+      border-radius: 2px;
+    }
+
+    .client-delete-btn:hover {
+      opacity: 1;
+      background-color: var(--vscode-button-secondaryHoverBackground);
+    }
+
+    .add-client-form {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .client-input {
+      flex: 1;
+      padding: 6px 12px;
+      background-color: var(--vscode-input-background);
+      border: 1px solid var(--vscode-input-border);
+      border-radius: 4px;
+      color: var(--vscode-foreground);
+      font-family: var(--vscode-font-family);
+      font-size: 13px;
+    }
+
+    .client-input:focus {
+      outline: none;
+      border-color: var(--vscode-focusBorder);
+    }
+
+    .add-client-btn {
+      padding: 6px 14px;
+      background-color: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 500;
+      font-family: var(--vscode-font-family);
+      font-size: 13px;
+      transition: background-color 0.2s;
+      white-space: nowrap;
+    }
+
+    .add-client-btn:hover {
+      background-color: var(--vscode-button-hoverBackground);
+    }
+
+    .empty-clients {
+      text-align: center;
+      padding: 24px;
+      color: var(--vscode-descriptionForeground);
+      font-style: italic;
+      font-size: 12px;
+    }
   </style>
 </head>
 <body>
@@ -228,6 +371,57 @@ export class SettingsViewProvider {
       <h1>Project Dashboard</h1>
       <div class="version">Version 0.0.1</div>
       <div class="author">by SVT</div>
+    </div>
+
+    <div class="section">
+      <h2><span class="emoji">👥</span> Управление клиентами</h2>
+      <p>
+        Здесь вы можете добавить список клиентов для быстрого выбора при создании или редактировании проектов.
+      </p>
+      <div class="clients-section">
+        <div id="clients-container">
+          ${clients.length > 0 ? `
+            <table class="clients-table">
+              <thead>
+                <tr>
+                  <th style="width: 40px;">#</th>
+                  <th>Название клиента</th>
+                  <th style="width: 60px; text-align: center;"></th>
+                </tr>
+              </thead>
+              <tbody id="clients-list">
+                ${clients.map((client, index) => `
+                  <tr>
+                    <td style="color: var(--vscode-descriptionForeground);">${index + 1}</td>
+                    <td>${this.escapeHtml(client)}</td>
+                    <td style="text-align: center;">
+                      <button class="client-delete-btn" onclick="deleteClient('${this.escapeHtml(client)}')" title="Удалить">
+                        ✕
+                      </button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          ` : `
+            <div class="empty-clients" id="empty-clients">
+              Нет клиентов. Добавьте первого клиента ниже.
+            </div>
+          `}
+        </div>
+        <div class="add-client-form">
+          <input 
+            type="text" 
+            id="client-input" 
+            class="client-input" 
+            placeholder="Название клиента..."
+            onkeydown="if(event.key === 'Enter') addClient()"
+          />
+          <button class="add-client-btn" onclick="addClient()">
+            Добавить
+          </button>
+        </div>
+      </div>
     </div>
 
     <div class="section">
@@ -359,7 +553,102 @@ export class SettingsViewProvider {
       </p>
     </div>
   </div>
+
+  <script>
+    const vscode = acquireVsCodeApi();
+
+    // Добавление клиента
+    function addClient() {
+      const input = document.getElementById('client-input');
+      const clientName = input.value.trim();
+      
+      if (!clientName) {
+        return;
+      }
+
+      vscode.postMessage({
+        command: 'addClient',
+        client: clientName
+      });
+
+      input.value = '';
+    }
+
+    // Удаление клиента
+    function deleteClient(clientName) {
+      if (confirm('Удалить клиента "' + clientName + '"?')) {
+        vscode.postMessage({
+          command: 'deleteClient',
+          client: clientName
+        });
+      }
+    }
+
+    // Обновление списка клиентов
+    window.addEventListener('message', event => {
+      const message = event.data;
+      
+      if (message.command === 'updateClients') {
+        updateClientsList(message.clients);
+      }
+    });
+
+    function updateClientsList(clients) {
+      const container = document.getElementById('clients-container');
+      
+      if (clients.length === 0) {
+        container.innerHTML = \`
+          <div class="empty-clients" id="empty-clients">
+            Нет клиентов. Добавьте первого клиента ниже.
+          </div>
+        \`;
+      } else {
+        container.innerHTML = \`
+          <table class="clients-table">
+            <thead>
+              <tr>
+                <th style="width: 40px;">#</th>
+                <th>Название клиента</th>
+                <th style="width: 60px; text-align: center;"></th>
+              </tr>
+            </thead>
+            <tbody id="clients-list">
+              \${clients.map((client, index) => \`
+                <tr>
+                  <td style="color: var(--vscode-descriptionForeground);">\${index + 1}</td>
+                  <td>\${escapeHtml(client)}</td>
+                  <td style="text-align: center;">
+                    <button class="client-delete-btn" onclick="deleteClient('\${escapeHtml(client)}')" title="Удалить">
+                      ✕
+                    </button>
+                  </td>
+                </tr>
+              \`).join('')}
+            </tbody>
+          </table>
+        \`;
+      }
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Запрос клиентов при загрузке
+    vscode.postMessage({ command: 'getClients' });
+  </script>
 </body>
 </html>`;
+  }
+
+  private escapeHtml(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 }

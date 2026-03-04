@@ -20,7 +20,7 @@ export function activate(context: vscode.ExtensionContext) {
   const projectsViewProvider = new ProjectsViewProvider(context, projectsProvider);
 
   // Инициализация провайдера настроек
-  const settingsViewProvider = new SettingsViewProvider(context);
+  const settingsViewProvider = new SettingsViewProvider(context, projectsProvider);
 
   // Инициализация провайдера деталей проекта
   const projectDetailViewProvider = new ProjectDetailViewProvider(context, projectsProvider);

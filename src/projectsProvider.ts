@@ -83,4 +83,24 @@ export class ProjectsProvider {
       this.invalidateCache();
     }
   }
+
+  // Методы для работы с клиентами
+  async getClients(): Promise<string[]> {
+    return this.context.globalState.get<string[]>('clients', []);
+  }
+
+  async addClient(client: string): Promise<void> {
+    const clients = await this.getClients();
+    if (!clients.includes(client)) {
+      clients.push(client);
+      clients.sort(); // Сортируем по алфавиту
+      await this.context.globalState.update('clients', clients);
+    }
+  }
+
+  async deleteClient(client: string): Promise<void> {
+    const clients = await this.getClients();
+    const filtered = clients.filter(c => c !== client);
+    await this.context.globalState.update('clients', filtered);
+  }
 }

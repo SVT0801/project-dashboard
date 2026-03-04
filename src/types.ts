@@ -6,12 +6,14 @@ export interface Project {
   color: string;
   path?: string;
   folderInode?: string; // Уникальный идентификатор папки (inode:dev) для отслеживания переименований
+  projectUrl?: string; // Ссылка на проект
+  clientName?: string; // Название клиента
   createdAt: string;
   updatedAt: string;
   lastAccessedAt?: string;
 }
 
-export type ViewMode = 'table' | 'grouped-date' | 'grouped-tags' | 'cards' | 'explorer';
+export type ViewMode = 'table' | 'grouped-date' | 'grouped-tags' | 'grouped-clients' | 'cards' | 'explorer';
 
 // WebView Message Types
 export type WebViewMessage =
@@ -23,4 +25,7 @@ export type WebViewMessage =
   | { command: 'saveField'; field: string; value: string }
   | { command: 'switchView' }
   | { command: 'openSettings' }
-  | { command: 'toggleRow'; projectId: string };
+  | { command: 'toggleRow'; projectId: string }
+  | { command: 'getClients' }
+  | { command: 'addClient'; client: string }
+  | { command: 'deleteClient'; client: string };

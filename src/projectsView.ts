@@ -12,6 +12,12 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
     private context: vscode.ExtensionContext,
     private projectsProvider: ProjectsProvider
   ) {
+    // Загружаем сохраненный режим отображения
+    const savedViewMode = this.context.globalState.get<ViewMode>('viewMode');
+    if (savedViewMode) {
+      this._viewMode = savedViewMode;
+    }
+    
     // Создаем debounced версию refresh
     this._debouncedRefresh = debounce(() => this.refresh(), 100);
     
@@ -73,18 +79,24 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
   }
 
   toggleView() {
-    // Циклическое переключение: table → grouped-date → grouped-tags → cards → explorer → table
+    // Циклическое переключение: table → grouped-date → grouped-tags → grouped-clients → cards → explorer → table
     if (this._viewMode === 'table') {
       this._viewMode = 'grouped-date';
     } else if (this._viewMode === 'grouped-date') {
       this._viewMode = 'grouped-tags';
     } else if (this._viewMode === 'grouped-tags') {
+      this._viewMode = 'grouped-clients';
+    } else if (this._viewMode === 'grouped-clients') {
       this._viewMode = 'cards';
     } else if (this._viewMode === 'cards') {
       this._viewMode = 'explorer';
     } else {
       this._viewMode = 'table';
     }
+    
+    // Сохраняем выбранный режим
+    this.context.globalState.update('viewMode', this._viewMode);
+    
     // Для view mode используем немедленный refresh
     this.refresh();
   }
@@ -229,6 +241,7 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
       display: flex;
       flex-wrap: wrap;
       gap: 4px;
+      align-items: center;
     }
 
     .tag {
@@ -239,6 +252,29 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
       border-radius: 3px;
       font-size: 11px;
       white-space: nowrap;
+    }
+
+    .client-tag {
+      background-color: #ffd93d30;
+      color: var(--vscode-foreground);
+      border: 1px solid #ffd93d;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 11px;
+      white-space: nowrap;
+      font-weight: 500;
+    }
+
+    .project-link-icon {
+      width: 14px;
+      height: 14px;
+      opacity: 0.3;
+      flex-shrink: 0;
+    }
+
+    .project-link-icon.has-link {
+      opacity: 1;
+      color: var(--vscode-textLink-foreground);
     }
 
     /* Стиль таблицы */
@@ -451,7 +487,9 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
           const matchDescription = project.description?.toLowerCase().includes(searchQuery);
           const matchTags = project.tags.some(tag => tag.toLowerCase().includes(searchQuery));
           const matchPath = project.path?.toLowerCase().includes(searchQuery);
-          return matchName || matchDescription || matchTags || matchPath;
+          const matchClient = project.clientName?.toLowerCase().includes(searchQuery);
+          const matchUrl = project.projectUrl?.toLowerCase().includes(searchQuery);
+          return matchName || matchDescription || matchTags || matchPath || matchClient || matchUrl;
         });
         
         searchInfo.style.display = 'block';
@@ -496,11 +534,53 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
         renderGroupedByDate(content);
       } else if (viewMode === 'grouped-tags') {
         renderGroupedByTags(content);
+      } else if (viewMode === 'grouped-clients') {
+        renderGroupedByClients(content);
       } else if (viewMode === 'cards') {
         renderCards(content);
       } else if (viewMode === 'explorer') {
         renderExplorer(content);
       }
+    }
+
+    function renderProjectTags(project) {
+      let html = '';
+      
+      // Иконка ссылки на проект (слева)
+      const hasLink = project.projectUrl ? 'has-link' : '';
+      html += \`<svg class="project-link-icon \${hasLink}" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M7.775 3.275a.75.75 0 001.06 1.06l1.25-1.25a2 2 0 112.83 2.83l-2.5 2.5a2 2 0 01-2.83 0 .75.75 0 00-1.06 1.06 3.5 3.5 0 004.95 0l2.5-2.5a3.5 3.5 0 00-4.95-4.95l-1.25 1.25zm-4.69 9.64a2 2 0 010-2.83l2.5-2.5a2 2 0 012.83 0 .75.75 0 001.06-1.06 3.5 3.5 0 00-4.95 0l-2.5 2.5a3.5 3.5 0 004.95 4.95l1.25-1.25a.75.75 0 00-1.06-1.06l-1.25 1.25a2 2 0 01-2.83 0z"/>
+      </svg>\`;
+      
+      // Тег клиента (если есть)
+      if (project.clientName) {
+        html += \`<span class="client-tag">\${escapeHtml(project.clientName)}</span>\`;
+      }
+      
+      // Обычные теги
+      if (project.tags.length > 0) {
+        html += project.tags.map(tag => \`<span class="tag">\${escapeHtml(tag)}</span>\`).join('');
+      }
+      
+      return html;
+    }
+
+    function renderProjectTagsCompact(project) {
+      let html = '';
+      
+      // Иконка ссылки на проект (компактная для explorer view)
+      if (project.projectUrl) {
+        html += \`<svg class="project-link-icon has-link" viewBox="0 0 16 16" fill="currentColor" style="width: 12px; height: 12px;">
+          <path d="M7.775 3.275a.75.75 0 001.06 1.06l1.25-1.25a2 2 0 112.83 2.83l-2.5 2.5a2 2 0 01-2.83 0 .75.75 0 00-1.06 1.06 3.5 3.5 0 004.95 0l2.5-2.5a3.5 3.5 0 00-4.95-4.95l-1.25 1.25zm-4.69 9.64a2 2 0 010-2.83l2.5-2.5a2 2 0 012.83 0 .75.75 0 001.06-1.06 3.5 3.5 0 00-4.95 0l-2.5 2.5a3.5 3.5 0 004.95 4.95l1.25-1.25a.75.75 0 00-1.06-1.06l-1.25 1.25a2 2 0 01-2.83 0z"/>
+        </svg>\`;
+      }
+      
+      // Тег клиента (если есть)
+      if (project.clientName) {
+        html += \`<span style="font-size: 10px; padding: 1px 4px; background-color: #ffd93d30; border: 1px solid #ffd93d; border-radius: 2px; margin-left: 4px;">\${escapeHtml(project.clientName)}</span>\`;
+      }
+      
+      return html;
     }
 
     function renderCards(container) {
@@ -524,11 +604,9 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
           \${project.description ? \`
             <div class="card-description">\${escapeHtml(project.description)}</div>
           \` : ''}
-          \${project.tags.length > 0 ? \`
-            <div class="card-tags">
-              \${project.tags.map(tag => \`<span class="tag">\${escapeHtml(tag)}</span>\`).join('')}
-            </div>
-          \` : ''}
+          <div class="card-tags">
+            \${renderProjectTags(project)}
+          </div>
         </div>
       \`).join('');
     }
@@ -555,11 +633,9 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
                       <div class="card-color-dot" style="background-color: \${sanitizeColor(project.color)};"></div>
                       \${escapeHtml(project.name)}
                     </div>
-                    \${project.tags.length > 0 ? \`
-                      <div class="card-tags" style="margin-top: 4px;">
-                        \${project.tags.map(tag => \`<span class="tag">\${escapeHtml(tag)}</span>\`).join('')}
-                      </div>
-                    \` : ''}
+                    <div class="card-tags" style="margin-top: 4px;">
+                      \${renderProjectTags(project)}
+                    </div>
                   </td>
                   <td>
                     <div class="table-actions">
@@ -682,11 +758,9 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
                           <div class="card-color-dot" style="background-color: \${sanitizeColor(project.color)};"></div>
                           \${escapeHtml(project.name)}
                         </div>
-                        \${project.tags.length > 0 ? \`
-                          <div class="card-tags" style="margin-top: 4px;">
-                            \${project.tags.map(tag => \`<span class="tag">\${escapeHtml(tag)}</span>\`).join('')}
-                          </div>
-                        \` : ''}
+                        <div class="card-tags" style="margin-top: 4px;">
+                          \${renderProjectTags(project)}
+                        </div>
                       </td>
                       <td style="width: 100px; padding: 8px;">
                         <div class="table-actions">
@@ -839,6 +913,127 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
       container.innerHTML = html || '<div class="empty-state">Нет проектов для отображения</div>';
     }
 
+    function renderGroupedByClients(container) {
+      // Группировка проектов по клиентам
+      const clientGroups = new Map();
+      const noClientProjects = [];
+
+      projects.forEach(project => {
+        if (!project.clientName) {
+          noClientProjects.push(project);
+        } else {
+          if (!clientGroups.has(project.clientName)) {
+            clientGroups.set(project.clientName, []);
+          }
+          clientGroups.get(project.clientName).push(project);
+        }
+      });
+
+      // Сортируем клиентов по алфавиту
+      const sortedClients = Array.from(clientGroups.keys()).sort();
+
+      let html = '';
+
+      // Проекты с клиентами
+      sortedClients.forEach(client => {
+        const clientProjects = clientGroups.get(client);
+        html += \`
+          <div class="group-section">
+            <div class="group-header" onclick="toggleGroup('client-\${escapeHtml(client)}')">
+              <span class="group-expand-icon" id="group-icon-client-\${escapeHtml(client)}">▼</span>
+              <span class="group-title">\${escapeHtml(client)}</span>
+              <span class="group-count">\${clientProjects.length}</span>
+            </div>
+            <div class="group-content" id="group-content-client-\${escapeHtml(client)}">
+              <table style="width: 100%; border-collapse: collapse;">
+                <tbody>
+                  \${clientProjects.map(project => \`
+                    <tr class="table-row" style="border-left-color: \${sanitizeColor(project.color)};" onclick="event.target.tagName !== 'BUTTON' && viewDetails('\${project.id}')">
+                      <td style="padding: 8px; cursor: pointer;">
+                        <div class="table-name">
+                          <div class="card-color-dot" style="background-color: \${sanitizeColor(project.color)};"></div>
+                          \${escapeHtml(project.name)}
+                        </div>
+                        \${project.tags.length > 0 ? \`
+                          <div class="card-tags" style="margin-top: 4px;">
+                            \${project.tags.map(tag => \`<span class="tag">\${escapeHtml(tag)}</span>\`).join('')}
+                          </div>
+                        \` : ''}
+                        \${project.description ? \`<div style="font-size: 12px; color: var(--vscode-descriptionForeground); margin-top: 4px;">\${escapeHtml(project.description)}</div>\` : ''}
+                      </td>
+                      <td style="width: 100px; padding: 8px;">
+                        <div class="table-actions">
+                          <button class="card-action-btn" onclick="event.stopPropagation(); openProject('\${project.id}')" title="Открыть проект">
+                            <svg viewBox="0 0 16 16"><path d="M8 0l8 8-8 8V9H0V7h8V0z"/></svg>
+                          </button>
+                          <button class="card-action-btn" onclick="event.stopPropagation(); editProject('\${project.id}')" title="Редактировать">
+                            <svg viewBox="0 0 16 16"><path d="M13.5 1l1.5 1.5L5.5 12 1 13.5 2.5 9 13.5 1zM4 10l1 1L2 12l1-1z"/></svg>
+                          </button>
+                          <button class="card-action-btn" onclick="event.stopPropagation(); deleteProject('\${project.id}')" title="Удалить">
+                            <svg viewBox="0 0 16 16"><path d="M2 3v11c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V3H2zm2 11V6h8v8H4zM1 2h4V1h6v1h4v1H1V2z"/></svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  \`).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        \`;
+      });
+
+      // Проекты без клиента
+      if (noClientProjects.length > 0) {
+        html += \`
+          <div class="group-section">
+            <div class="group-header" onclick="toggleGroup('no-client')">
+              <span class="group-expand-icon" id="group-icon-no-client">▼</span>
+              <span class="group-title">Без клиента</span>
+              <span class="group-count">\${noClientProjects.length}</span>
+            </div>
+            <div class="group-content" id="group-content-no-client">
+              <table style="width: 100%; border-collapse: collapse;">
+                <tbody>
+                  \${noClientProjects.map(project => \`
+                    <tr class="table-row" style="border-left-color: \${sanitizeColor(project.color)};" onclick="event.target.tagName !== 'BUTTON' && viewDetails('\${project.id}')">
+                      <td style="padding: 8px; cursor: pointer;">
+                        <div class="table-name">
+                          <div class="card-color-dot" style="background-color: \${sanitizeColor(project.color)};"></div>
+                          \${escapeHtml(project.name)}
+                        </div>
+                        \${project.tags.length > 0 ? \`
+                          <div class="card-tags" style="margin-top: 4px;">
+                            \${project.tags.map(tag => \`<span class="tag">\${escapeHtml(tag)}</span>\`).join('')}
+                          </div>
+                        \` : ''}
+                        \${project.description ? \`<div style="font-size: 12px; color: var(--vscode-descriptionForeground); margin-top: 4px;">\${escapeHtml(project.description)}</div>\` : ''}
+                      </td>
+                      <td style="width: 100px; padding: 8px;">
+                        <div class="table-actions">
+                          <button class="card-action-btn" onclick="event.stopPropagation(); openProject('\${project.id}')" title="Открыть проект">
+                            <svg viewBox="0 0 16 16"><path d="M8 0l8 8-8 8V9H0V7h8V0z"/></svg>
+                          </button>
+                          <button class="card-action-btn" onclick="event.stopPropagation(); editProject('\${project.id}')" title="Редактировать">
+                            <svg viewBox="0 0 16 16"><path d="M13.5 1l1.5 1.5L5.5 12 1 13.5 2.5 9 13.5 1zM4 10l1 1L2 12l1-1z"/></svg>
+                          </button>
+                          <button class="card-action-btn" onclick="event.stopPropagation(); deleteProject('\${project.id}')" title="Удалить">
+                            <svg viewBox="0 0 16 16"><path d="M2 3v11c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V3H2zm2 11V6h8v8H4zM1 2h4V1h6v1h4v1H1V2z"/></svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  \`).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        \`;
+      }
+
+      container.innerHTML = html || '<div class="empty-state">Нет проектов для отображения</div>';
+    }
+
     function renderExplorer(container) {
       // Отображение в стиле Explorer VS Code - теги как папки
       const tagGroups = new Map();
@@ -876,7 +1071,10 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
               \${tagProjects.map(project => \`
                 <div class="explorer-item" onclick="viewDetails('\${project.id}')" style="cursor: pointer; padding: 4px 8px; border-radius: 4px; display: flex; align-items: center; gap: 6px; font-size: 13px;" onmouseover="this.style.backgroundColor='var(--vscode-list-hoverBackground)'" onmouseout="this.style.backgroundColor='transparent'">
                   <div style="width: 8px; height: 8px; border-radius: 50%; background-color: \${sanitizeColor(project.color)}; flex-shrink: 0;"></div>
-                  <span style="flex: 1;">\${escapeHtml(project.name)}</span>
+                  <span style="flex: 1; display: flex; align-items: center; gap: 4px;">
+                    \${escapeHtml(project.name)}
+                    \${renderProjectTagsCompact(project)}
+                  </span>
                   <div style="display: flex; gap: 2px; opacity: 0; transition: opacity 0.2s;" class="explorer-actions">
                     <button class="card-action-btn" onclick="event.stopPropagation(); openProject('\${project.id}')" title="Открыть проект" style="padding: 2px;">
                       <svg viewBox="0 0 16 16" width="12" height="12"><path d="M8 0l8 8-8 8V9H0V7h8V0z"/></svg>
@@ -909,7 +1107,10 @@ export class ProjectsViewProvider implements vscode.WebviewViewProvider {
               \${noTagsProjects.map(project => \`
                 <div class="explorer-item" onclick="viewDetails('\${project.id}')" style="cursor: pointer; padding: 4px 8px; border-radius: 4px; display: flex; align-items: center; gap: 6px; font-size: 13px;" onmouseover="this.style.backgroundColor='var(--vscode-list-hoverBackground)'" onmouseout="this.style.backgroundColor='transparent'">
                   <div style="width: 8px; height: 8px; border-radius: 50%; background-color: \${sanitizeColor(project.color)}; flex-shrink: 0;"></div>
-                  <span style="flex: 1;">\${escapeHtml(project.name)}</span>
+                  <span style="flex: 1; display: flex; align-items: center; gap: 4px;">
+                    \${escapeHtml(project.name)}
+                    \${renderProjectTagsCompact(project)}
+                  </span>
                   <div style="display: flex; gap: 2px; opacity: 0; transition: opacity 0.2s;" class="explorer-actions">
                     <button class="card-action-btn" onclick="event.stopPropagation(); openProject('\${project.id}')" title="Открыть проект" style="padding: 2px;">
                       <svg viewBox="0 0 16 16" width="12" height="12"><path d="M8 0l8 8-8 8V9H0V7h8V0z"/></svg>
